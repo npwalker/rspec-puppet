@@ -2,19 +2,8 @@ module RSpec::Puppet
   module Adapters
 
     class Base
-      # Set up all Puppet settings applicable for this Puppet version
-      #
-      # @param example_group [RSpec::Core::ExampleGroup] The RSpec context to use for local settings
-      # @return [void]
-      def setup_puppet(example_group)
-        settings_map.each do |puppet_setting, rspec_setting|
-          set_setting(example_group, puppet_setting, rspec_setting)
-        end
-        @environment_name = example_group.environment
-      end
-
-      # Set up a specific Puppet setting.
-      # configuration setting.
+      # Set up all Puppet settings applicable for this Puppet version as
+      # application defaults.
       #
       # Puppet setting values can be taken from the global RSpec configuration, or from the currently
       # executing RSpec context. When a setting is specified both in the global configuration and in
@@ -48,21 +37,35 @@ module RSpec::Puppet
       #   end
       #
       # @param example_group [RSpec::Core::ExampleGroup] The RSpec context to use for local settings
-      # @param puppet_setting [Symbol] The name of the Puppet setting to configure
-      # @param rspec_setting [Symbol] The name of the RSpec context specific or global setting to use
       # @return [void]
-      def set_setting(example_group, puppet_setting, rspec_setting)
-        if example_group.respond_to?(rspec_setting)
-          value = example_group.send(rspec_setting)
-        else
-          value = RSpec.configuration.send(rspec_setting)
-        end
+      def setup_puppet(example_group)
+        settings = settings_map.map do |puppet_setting, rspec_setting|
+          [puppet_setting, get_setting(example_group, rspec_setting)]
+        end.flatten
+        settings_hash = Puppet::Test::TestHelper.send(:app_defaults_for_tests).merge(Hash[*settings])
+
         begin
-          Puppet[puppet_setting] = value
-        rescue ArgumentError
-          # TODO: this silently swallows errors when applying settings that the current
-          # Puppet version does not accept, which means that user specified settings
-          # are ignored. This may lead to suprising behavior for users.
+          Puppet.settings.initialize_app_defaults(settings_hash)
+        rescue ArgumentError => e
+          # If we try to set a setting this version of Puppet can't handle, get
+          # the setting name from the exception message, remove it from
+          # settings_hash and try again.
+          bad_setting = e.message[/:(\w+)$/, 1].to_sym
+          if settings_hash.has_key?(bad_setting)
+            settings_hash.delete(bad_setting)
+            retry
+          else
+            raise e
+          end
+        end
+        @environment_name = example_group.environment
+      end
+
+      def get_setting(example_group, rspec_setting)
+        if example_group.respond_to?(rspec_setting)
+          example_group.send(rspec_setting)
+        else
+          RSpec.configuration.send(rspec_setting)
         end
       end
 
