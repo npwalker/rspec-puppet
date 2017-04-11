@@ -42,10 +42,23 @@ module RSpec::Puppet
         settings = settings_map.map do |puppet_setting, rspec_setting|
           [puppet_setting, get_setting(example_group, rspec_setting)]
         end.flatten
-        settings_hash = Puppet::Test::TestHelper.send(:app_defaults_for_tests).merge(Hash[*settings])
+        default_hash = {:confdir => '/dev/null', :vardir => '/dev/null' }
+        if defined?(Puppet::Test::TestHelper) && Puppet::Test::TestHelper.respond_to?(:app_defaults_for_tests, true)
+          default_hash.merge!(Puppet::Test::TestHelper.send(:app_defaults_for_tests))
+        end
+        settings_hash = default_hash.merge(Hash[*settings])
 
         begin
-          Puppet.settings.initialize_app_defaults(settings_hash)
+          if Puppet.settings.respond_to?(:initialize_app_defaults)
+            Puppet.settings.initialize_app_defaults(settings_hash)
+          else
+            # Set settings the old way for Puppet 2.x, because that's how
+            # they're defaulted in that version of Puppet::Test::TestHelper and
+            # we won't be able to override them otherwise.
+            settings_hash.each do |setting, value|
+              Puppet.settings[setting] = value
+            end
+          end
         rescue ArgumentError => e
           # If we try to set a setting this version of Puppet can't handle, get
           # the setting name from the exception message, remove it from
