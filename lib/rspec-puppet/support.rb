@@ -255,18 +255,11 @@ module RSpec::Puppet
 
     def stub_facts!(facts)
       if facts['operatingsystem'] && facts['operatingsystem'].to_s.downcase == 'windows'
-        # If we're not running in windows but are testing a catalogue destined
-        # for a windows host, pretend to be windows in the least awful way that
-        # I can think of.
-        unless Puppet::Util::Platform.windows?
-          Puppet::Util::Platform.pretend_windows
-          # On windows, puppet validates the value of the autosign setting as
-          # an absolute path unless it's disabled.
-          Puppet.settings[:autosign] = false
-        end
+        Puppet::Util::Platform.pretend_windows
       else
         Puppet::Util::Platform.unpretend_windows
       end
+      Puppet.settings[:autosign] = false
       facts.each { |k, v| Facter.add(k) { setcode { v } } }
     end
 

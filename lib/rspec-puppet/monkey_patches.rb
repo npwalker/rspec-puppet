@@ -57,7 +57,7 @@ module Puppet
     # Allow rspec-puppet to pretend to be windows.
     module Platform
       def windows?
-        pretend_windows? || !!File::ALT_SEPARATOR
+        pretend_windows?
       end
       module_function :windows?
 
